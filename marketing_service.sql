@@ -36,12 +36,21 @@ ALTER TYPE public.user_role OWNER TO marketing_service;
 
 CREATE FUNCTION public.update_sequence_after_delete() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-BEGIN
-    EXECUTE format('SELECT setval(''%s_%s_seq'', (SELECT COALESCE(MAX(%s), 0) + 1 FROM %s))',
-                   TG_TABLE_NAME, TG_ARGV[0], TG_ARGV[0], TG_TABLE_NAME);
-    RETURN NULL;
-END;
+    AS $$
+DECLARE
+    new_val BIGINT;
+BEGIN
+    EXECUTE format('SELECT setval(''%s_%s_seq'', (SELECT COALESCE(MAX(%s), 0) + 1 FROM %s))',
+                   TG_TABLE_NAME, TG_ARGV[0], TG_ARGV[0], TG_TABLE_NAME);
+    
+    -- Получаем текущее значение последовательности
+    EXECUTE format('SELECT last_value FROM %s_%s_seq', TG_TABLE_NAME, TG_ARGV[0]) INTO new_val;
+    
+    -- Выводим сообщение
+    RAISE NOTICE 'Последовательность обновлена: %', new_val;
+    
+    RETURN NULL;
+END;
 $$;
 
 
@@ -109,6 +118,18 @@ CREATE TABLE public.authors (
 ALTER TABLE public.authors OWNER TO marketing_service;
 
 --
+-- Name: book_authors; Type: TABLE; Schema: public; Owner: marketing_service
+--
+
+CREATE TABLE public.book_authors (
+    book_id integer NOT NULL,
+    author_id integer NOT NULL
+);
+
+
+ALTER TABLE public.book_authors OWNER TO marketing_service;
+
+--
 -- Name: books_book_id_seq; Type: SEQUENCE; Schema: public; Owner: marketing_service
 --
 
@@ -129,7 +150,6 @@ ALTER SEQUENCE public.books_book_id_seq OWNER TO marketing_service;
 CREATE TABLE public.books (
     book_id integer DEFAULT nextval('public.books_book_id_seq'::regclass) NOT NULL,
     title character varying(255) NOT NULL,
-    author_id integer,
     genre character varying(100),
     published_date date DEFAULT CURRENT_DATE,
     price numeric(10,2) NOT NULL,
@@ -358,6 +378,29 @@ COPY public.authors (author_id, first_name, last_name, bio) FROM stdin;
 8	Александр	Солженицын	Лауреат Нобелевской премии
 9	Владимир	Набоков	Русский и американский писатель
 10	Борис	Пастернак	Поэт и прозаик
+11	Илья	Ильф	Русский советский писатель
+12	Евгений	Петров	Русский советский писатель
+\.
+
+
+--
+-- Data for Name: book_authors; Type: TABLE DATA; Schema: public; Owner: marketing_service
+--
+
+COPY public.book_authors (book_id, author_id) FROM stdin;
+1	1
+2	2
+3	3
+4	4
+5	5
+6	6
+7	7
+8	8
+9	9
+10	10
+11	1
+12	11
+12	12
 \.
 
 
@@ -365,18 +408,19 @@ COPY public.authors (author_id, first_name, last_name, bio) FROM stdin;
 -- Data for Name: books; Type: TABLE DATA; Schema: public; Owner: marketing_service
 --
 
-COPY public.books (book_id, title, author_id, genre, published_date, price, stock) FROM stdin;
-1	Война и мир	1	Роман	1869-01-01	1500.00	100
-2	Преступление и наказание	2	Роман	1866-01-01	1200.00	80
-3	Вишневый сад	3	Пьеса	1904-01-01	800.00	50
-4	Евгений Онегин	4	Роман в стихах	1833-01-01	900.00	70
-5	Мертвые души	5	Поэма	1842-01-01	950.00	60
-6	Отцы и дети	6	Роман	1862-01-01	850.00	90
-7	Мастер и Маргарита	7	Роман	1967-01-01	1300.00	120
-8	Архипелаг ГУЛАГ	8	Художественно-историческое	1973-01-01	2000.00	40
-9	Лолита	9	Роман	1955-01-01	1100.00	75
-10	Доктор Живаго	10	Роман	1957-01-01	1400.00	65
-11	Детство	1	Повесть	2025-03-20	1700.00	76
+COPY public.books (book_id, title, genre, published_date, price, stock) FROM stdin;
+1	Война и мир	Роман	1869-01-01	1500.00	100
+2	Преступление и наказание	Роман	1866-01-01	1200.00	80
+3	Вишневый сад	Пьеса	1904-01-01	800.00	50
+4	Евгений Онегин	Роман в стихах	1833-01-01	900.00	70
+5	Мертвые души	Поэма	1842-01-01	950.00	60
+6	Отцы и дети	Роман	1862-01-01	850.00	90
+7	Мастер и Маргарита	Роман	1967-01-01	1300.00	120
+8	Архипелаг ГУЛАГ	Художественно-историческое	1973-01-01	2000.00	40
+9	Лолита	Роман	1955-01-01	1100.00	75
+10	Доктор Живаго	Роман	1957-01-01	1400.00	65
+11	Детство	Повесть	2025-03-20	1700.00	76
+12	Двенадцать стульев	Роман	2025-03-30	250.00	54
 \.
 
 
@@ -468,6 +512,7 @@ COPY public.orders (order_id, customer_id, order_date, total_amount, title, genr
 9	9	2024-03-09	3600.00	Лолита	Роман
 10	10	2024-03-10	2750.00	Доктор Живаго	Роман
 12	1	2025-03-23	435.00	Детство	Повесть
+14	1	2025-03-27	2154.00	test	Роман
 \.
 
 
@@ -520,14 +565,14 @@ SELECT pg_catalog.setval('public.administrators_administrator_id_seq', 10, true)
 -- Name: authors_author_id_seq; Type: SEQUENCE SET; Schema: public; Owner: marketing_service
 --
 
-SELECT pg_catalog.setval('public.authors_author_id_seq', 11, true);
+SELECT pg_catalog.setval('public.authors_author_id_seq', 12, true);
 
 
 --
 -- Name: books_book_id_seq; Type: SEQUENCE SET; Schema: public; Owner: marketing_service
 --
 
-SELECT pg_catalog.setval('public.books_book_id_seq', 12, true);
+SELECT pg_catalog.setval('public.books_book_id_seq', 13, true);
 
 
 --
@@ -555,14 +600,14 @@ SELECT pg_catalog.setval('public.marketers_marketer_id_seq', 12, true);
 -- Name: marketing_materials_material_id_seq; Type: SEQUENCE SET; Schema: public; Owner: marketing_service
 --
 
-SELECT pg_catalog.setval('public.marketing_materials_material_id_seq', 12, true);
+SELECT pg_catalog.setval('public.marketing_materials_material_id_seq', 13, true);
 
 
 --
 -- Name: orders_order_id_seq; Type: SEQUENCE SET; Schema: public; Owner: marketing_service
 --
 
-SELECT pg_catalog.setval('public.orders_order_id_seq', 13, true);
+SELECT pg_catalog.setval('public.orders_order_id_seq', 14, true);
 
 
 --
@@ -594,6 +639,14 @@ ALTER TABLE ONLY public.administrators
 
 ALTER TABLE ONLY public.authors
     ADD CONSTRAINT authors_pkey PRIMARY KEY (author_id);
+
+
+--
+-- Name: book_authors book_authors_pkey; Type: CONSTRAINT; Schema: public; Owner: marketing_service
+--
+
+ALTER TABLE ONLY public.book_authors
+    ADD CONSTRAINT book_authors_pkey PRIMARY KEY (book_id, author_id);
 
 
 --
@@ -677,6 +730,13 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: books trg_books_after_delete; Type: TRIGGER; Schema: public; Owner: marketing_service
+--
+
+CREATE TRIGGER trg_books_after_delete AFTER DELETE ON public.books FOR EACH STATEMENT EXECUTE FUNCTION public.update_sequence_after_delete('book_id');
+
+
+--
 -- Name: users trg_users_after_delete; Type: TRIGGER; Schema: public; Owner: marketing_service
 --
 
@@ -692,11 +752,19 @@ ALTER TABLE ONLY public.administrators
 
 
 --
--- Name: books books_author_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: marketing_service
+-- Name: book_authors book_authors_author_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: marketing_service
 --
 
-ALTER TABLE ONLY public.books
-    ADD CONSTRAINT books_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.authors(author_id) ON DELETE SET NULL;
+ALTER TABLE ONLY public.book_authors
+    ADD CONSTRAINT book_authors_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.authors(author_id);
+
+
+--
+-- Name: book_authors book_authors_book_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: marketing_service
+--
+
+ALTER TABLE ONLY public.book_authors
+    ADD CONSTRAINT book_authors_book_id_fkey FOREIGN KEY (book_id) REFERENCES public.books(book_id);
 
 
 --
